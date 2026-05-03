@@ -1,12 +1,28 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const { getDb } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+});
+
 // GET /api/listings — public, list all listings
-router.get('/', (req, res) => {
+router.get('/', readLimiter, (req, res) => {
   const db = getDb();
   const listings = db
     .prepare(
@@ -23,6 +39,7 @@ router.get('/', (req, res) => {
 // GET /api/listings/:id — public, single listing
 router.get(
   '/:id',
+  readLimiter,
   [param('id').isInt({ min: 1 }).withMessage('Invalid listing id')],
   (req, res) => {
     const errors = validationResult(req);
@@ -47,6 +64,7 @@ router.get(
 // POST /api/listings — protected, create listing
 router.post(
   '/',
+  writeLimiter,
   authenticate,
   [
     body('title').trim().notEmpty().withMessage('Title is required'),
@@ -71,6 +89,7 @@ router.post(
 // PATCH /api/listings/:id — protected, update own listing
 router.patch(
   '/:id',
+  writeLimiter,
   authenticate,
   [
     param('id').isInt({ min: 1 }).withMessage('Invalid listing id'),
@@ -102,6 +121,7 @@ router.patch(
 // DELETE /api/listings/:id — protected, delete own listing
 router.delete(
   '/:id',
+  writeLimiter,
   authenticate,
   [param('id').isInt({ min: 1 }).withMessage('Invalid listing id')],
   (req, res) => {
